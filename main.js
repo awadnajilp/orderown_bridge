@@ -286,13 +286,18 @@ async function printImageJob(imageUrl, localPrinterName, printFormat) {
 async function printHtmlJob(htmlContent, localPrinterName, printFormat) {
     const widthMicrons  = formatToWidth(printFormat);
     const widthMm       = widthMicrons / 1000;
+    
+    // Standard thermal printer dot density (8 dots/mm)
+    // 80mm printer (72mm printable) -> 576px
+    // 58mm printer (48mm printable) -> 384px
+    const renderWidth = widthMm >= 80 ? 576 : 384;
 
-    log('PRINT', `Sending HTML to [${localPrinterName}] | format: ${widthMm}mm`);
+    log('PRINT', `Rendering HTML at ${renderWidth}px for [${localPrinterName}]`);
 
     return new Promise((resolve, reject) => {
         const win = new BrowserWindow({
             show:   false,
-            width:  Math.round(widthMm * 3.78), // approx px at 96 dpi
+            width:  renderWidth,
             height: 1200,
             webPreferences: {
                 nodeIntegration:  false,
@@ -408,6 +413,12 @@ async function processQueue() {
 
     while (jobQueue.length > 0) {
         const job = jobQueue.shift();
+        // Skip jobs that are too old and might be "ghosts" (handled by server, but we guard here too)
+        const ageInMinutes = (new Date() - new Date(job.updated_at || job.created_at)) / 60000;
+        if (job.status === 'printing' && ageInMinutes > 5) {
+            log('WARN', `Skipping ghost job #${job.id} (stuck in printing for ${Math.round(ageInMinutes)} mins)`);
+            continue;
+        }
         await processSingleJob(job);
     }
 
@@ -417,129 +428,86 @@ async function processQueue() {
 async function processSingleJob(job) {
     const cfg = loadConfig();
     const base = cfg.domainUrl.replace(/\/+$/, '');
+    const headers = apiHeaders(cfg.key);
 
-    // ── Log raw job structure first — essential for debugging ──────────
-    log('INFO', `Job #${job.id} raw keys: [${Object.keys(job).join(', ')}]`);
-    if (job.printer) {
-        log('INFO', `Job #${job.id} printer object: ${JSON.stringify(job.printer)}`);
-    }
+    // ── 1. Payload Prioritization (The "Gold" Rule) ──────────────────
+    const hasPayload    = !!job.payload;
+    const htmlContent   = job.payload?.html_content || null;
+    const escposBase64  = job.payload?.escpos_base64 || null;
+    const escposLegacy  = job.payload?.text || job.text || null;
+    const imageFilename = job.image_filename || null;
 
-    // ── Extract fields ───────────────────────────────────────────────
-    const apiPrinterName    = job.printer?.name
-                           || job.printer_name
-                           || (typeof job.printer === 'string' ? job.printer : '')
-                           || '';
-
-    const printFormat       = job.printer?.print_format  || '80mm';
-    const parentPrinterId   = job.printer?.parent_printer_id || null;
-    const isCopy            = !!job.is_copy;
-
-    // Detection: new API image vs ESC/POS payload
-    const imageFilename     = job.image_filename || null;
-    const htmlContent       = job.payload?.html_content || null;
-    // Detection: prioritize explicit type from payload, then printer config, then job object.
-    // Fallback based on content (HTML > Image > ESC/POS).
-    let printType = job.payload?.print_type || job.printer?.print_type || job.print_type;
-
-    // Content-based discovery (if no explicit type or if type is ambiguous)
-    if (!printType || printType === 'escpos') {
-        if (htmlContent) printType = 'html';
-        else if (imageFilename) printType = 'image';
-        else printType = 'escpos';
-    }
-
-    // Secondary Check: if it's explicitly 'escpos' but has an image and NO escpos data, switch to image.
-    const escposBase64      = job.payload?.escpos_base64 || null;
-    const escposLegacy      = job.payload?.text || job.text || null;
-    if (printType === 'escpos' && imageFilename && !escposBase64 && !escposLegacy) {
+    // Determine engine: HTML > ESCPOS > IMAGE (Fallback)
+    let printType = 'escpos'; // baseline
+    if (hasPayload) {
+        printType = job.payload.print_type || (htmlContent ? 'html' : 'escpos');
+    } else if (imageFilename) {
         printType = 'image';
     }
 
-    const imagePath         = (cfg.imageUrlPath || IMAGE_PATH).replace(/\/*$/, '/');
-    const imageUrl          = imageFilename ? `${base}${imagePath}${imageFilename}` : '';
-    const patchUrl          = `${base}${PATCH_BASE}/${job.id}`;
-    const headers           = apiHeaders(cfg.key);
+    const apiPrinterName    = job.printer?.name || job.printer_name || '';
+    const printFormat       = job.printer?.print_format || '80mm';
+    const isCopy            = !!job.is_copy;
+    const copyTag           = isCopy ? ' [COPY]' : '';
 
-    const copyTag = isCopy ? ` [COPY — parent printer #${parentPrinterId}]` : '';
-    log('INFO', `Job #${job.id} | type: ${printType} | printer: "${apiPrinterName}"${copyTag} | format: ${printFormat}`);
+    log('INFO', `Job #${job.id} | Engine: ${printType.toUpperCase()} | Printer: "${apiPrinterName}"${copyTag}`);
     emit('job-start', { id: job.id, printer: apiPrinterName, file: imageFilename || `(${printType})`, isCopy });
 
-    // Guard: must have a valid data source
-    if (printType === 'html' && !htmlContent) {
-        const reason = `Job #${job.id} is type 'html' but has no html_content`;
-        log('WARN', reason);
-        emit('job-fail', { id: job.id, reason });
-        await patchJob(patchUrl, 'failed', { error: reason }, headers);
-        return;
-    }
-    if (printType === 'image' && !imageFilename) {
-        const reason = `Job #${job.id} is type 'image' but has no image_filename`;
-        log('WARN', reason);
-        emit('job-fail', { id: job.id, reason });
-        await patchJob(patchUrl, 'failed', { error: reason }, headers);
-        return;
-    }
-    if (printType === 'escpos' && !escposBase64 && !escposLegacy) {
-        const reason = `Job #${job.id} is type 'escpos' but has no base64 payload or legacy text`;
-        log('WARN', reason);
-        emit('job-fail', { id: job.id, reason });
-        await patchJob(patchUrl, 'failed', { error: reason }, headers);
-        return;
-    }
-
-    // Resolve local printer name from saved mapping
+    // ── Resolve local printer ────────────────────────────────────────
     const mappedName = cfg.printerMappings?.[apiPrinterName];
-    if (!mappedName) {
-        const reason = `No local printer mapped for API printer "${apiPrinterName}" — add a mapping in Printer Map`;
-        log('WARN', `Job #${job.id}: ${reason}`);
-        emit('job-fail', { id: job.id, reason });
-        await patchJob(patchUrl, 'failed', { error: reason }, headers);
-        return;
-    }
-
-    // Confirm the local printer actually exists on this system right now
-    // AND resolve its exact case-sensitive system name.
-    const systemPrinter = await findSystemPrinter(mappedName);
+    const systemPrinter = mappedName ? await findSystemPrinter(mappedName) : null;
+    
     if (!systemPrinter) {
-        const reason = `Local printer "${mappedName}" not found on this system`;
+        const reason = !mappedName 
+            ? `No local printer mapped for "${apiPrinterName}"` 
+            : `Local printer "${mappedName}" not found`;
         log('WARN', `Job #${job.id}: ${reason}`);
         emit('job-fail', { id: job.id, reason });
-        await patchJob(patchUrl, 'failed', { error: reason }, headers);
+        await patchJob(`${base}${PATCH_BASE}/${job.id}`, 'failed', { error: reason }, headers);
         return;
     }
-
-    const localPrinterName = systemPrinter.name; // Use the exact casing from the system
+    const localPrinterName = systemPrinter.name;
 
     try {
         if (printType === 'html') {
-            // ── HTML print via Electron BrowserWindow ──────────
-            log('PRINT', `Job #${job.id}: printing HTML content on [${localPrinterName}]`);
+            if (!htmlContent) throw new Error('HTML content missing in payload');
             await printHtmlJob(htmlContent, localPrinterName, printFormat);
-        } else if (printType === 'image' || imageFilename) {
-            // ── Image print via Electron BrowserWindow ──────────
-            log('PRINT', `Job #${job.id}: printing image ${imageUrl} on [${localPrinterName}]`);
-            await printImageJob(imageUrl, localPrinterName, printFormat);
-        } else if (printType === 'escpos') {
-            // ── ESC/POS raw print ───────────────────────────────
-            let rawBuffer;
-            if (escposBase64) {
-                log('PRINT', `Job #${job.id}: decoding Base64 ESC/POS payload on [${localPrinterName}]`);
-                rawBuffer = Buffer.from(escposBase64, 'base64');
-            } else {
-                log('PRINT', `Job #${job.id}: unescaping legacy ESC/POS text on [${localPrinterName}]`);
-                rawBuffer = unescapeEscPos(escposLegacy);
-            }
-            log('INFO', `Job #${job.id}: sending ${rawBuffer.length} bytes to [${localPrinterName}]`);
+        } 
+        else if (printType === 'escpos') {
+            const rawBuffer = escposBase64 ? Buffer.from(escposBase64, 'base64') : unescapeEscPos(escposLegacy);
+            if (!rawBuffer || rawBuffer.length === 0) throw new Error('ESC/POS data missing');
             await printFileFallback(localPrinterName, rawBuffer);
+        } 
+        else if (printType === 'image') {
+            const imagePath = (cfg.imageUrlPath || IMAGE_PATH).replace(/\/*$/, '/');
+            const imageUrl  = `${base}${imagePath}${imageFilename}`;
+            try {
+                await printImageJob(imageUrl, localPrinterName, printFormat);
+            } catch (imgErr) {
+                log('WARN', `Image failed, attempting ESC/POS fallback for Job #${job.id}: ${imgErr.message}`);
+                // ── 5. Fallback to ESC/POS API Call ──────────────────────
+                try {
+                    const fallbackUrl = `${base}${PATCH_BASE}/${job.id}/fallback-to-escpos`;
+                    const res = await axios.post(fallbackUrl, {}, { headers, timeout: 8000 });
+                    if (res.data && res.data.payload) {
+                        log('INFO', `Fallback payload received for Job #${job.id} — re-queuing`);
+                        jobQueue.unshift(res.data); // put back at front with new payload
+                        return;
+                    }
+                } catch (fallbackApiErr) {
+                    log('ERROR', `Fallback API failed: ${fallbackApiErr.message}`);
+                }
+                throw imgErr; // re-throw if fallback fails
+            }
         }
 
         emit('job-done', { id: job.id, printer: localPrinterName });
-        await patchJob(patchUrl, 'done', { printer: localPrinterName }, headers);
-        log('OK', `Job #${job.id} → DONE on [${localPrinterName}]${copyTag}`);
+        await patchJob(`${base}${PATCH_BASE}/${job.id}`, 'done', { printer: localPrinterName }, headers);
+        log('OK', `Job #${job.id} → DONE`);
     } catch (err) {
-        log('ERROR', `Job #${job.id} print error: ${err.message}`);
+        log('ERROR', `Job #${job.id} Error: ${err.message}`);
         emit('job-fail', { id: job.id, reason: err.message });
-        await patchJob(patchUrl, 'failed', { error: err.message }, headers);
+        await patchJob(`${base}${PATCH_BASE}/${job.id}`, 'failed', { error: err.message }, headers);
     }
 }
 
