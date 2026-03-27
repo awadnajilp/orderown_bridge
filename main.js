@@ -559,11 +559,13 @@ async function processSingleJob(job) {
     const headers = apiHeaders(cfg.key);
 
     // ── 1. Payload Prioritization (The "Gold" Rule) ──────────────────
-    const hasPayload    = !!job.payload;
     const htmlContent   = job.payload?.html_content || null;
     const escposBase64  = job.payload?.escpos_base64 || null;
     const escposLegacy  = job.payload?.text || job.text || null;
     const imageFilename = job.image_filename || null;
+
+    // A payload is only "present" if it has actual data or a defined type
+    const hasPayload    = !!(job.payload && (job.payload.print_type || htmlContent || escposBase64 || escposLegacy));
 
     // Determine engine: HTML > ESCPOS > IMAGE (Fallback)
     let printType = 'escpos'; // baseline
