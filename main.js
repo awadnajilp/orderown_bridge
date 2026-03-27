@@ -437,11 +437,23 @@ async function processSingleJob(job) {
     // Detection: new API image vs ESC/POS payload
     const imageFilename     = job.image_filename || null;
     const htmlContent       = job.payload?.html_content || null;
-    const printType         = job.payload?.print_type || job.print_type || (htmlContent ? 'html' : (imageFilename ? 'image' : 'escpos'));
+    // Detection: prioritize explicit type from payload, then printer config, then job object.
+    // Fallback based on content (HTML > Image > ESC/POS).
+    let printType = job.payload?.print_type || job.printer?.print_type || job.print_type;
 
-    // ESC/POS data sources: new Base64 vs legacy escaped text
+    // Content-based discovery (if no explicit type or if type is ambiguous)
+    if (!printType || printType === 'escpos') {
+        if (htmlContent) printType = 'html';
+        else if (imageFilename) printType = 'image';
+        else printType = 'escpos';
+    }
+
+    // Secondary Check: if it's explicitly 'escpos' but has an image and NO escpos data, switch to image.
     const escposBase64      = job.payload?.escpos_base64 || null;
     const escposLegacy      = job.payload?.text || job.text || null;
+    if (printType === 'escpos' && imageFilename && !escposBase64 && !escposLegacy) {
+        printType = 'image';
+    }
 
     const imagePath         = (cfg.imageUrlPath || IMAGE_PATH).replace(/\/*$/, '/');
     const imageUrl          = imageFilename ? `${base}${imagePath}${imageFilename}` : '';
