@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OrderOwn Bridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ── Reset ────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:          #0c0d10;
+  --surface:     #14161b;
+  --surface2:    #1c1f27;
+  --surface3:    #242834;
+  --border:      #2a2f3d;
+  --border2:     #353c4e;
+  --text:        #e8eaf0;
+  --text2:       #9ba3b8;
+  --text3:       #5c6478;
+  --accent:      #f97316;
+  --accent2:     #fb923c;
+  --ok:          #22c55e;
+  --warn:        #eab308;
+  --err:         #ef4444;
+  --info:        #3b82f6;
+  --purple:      #a855f7;
+  --sidebar-w:   220px;
+  --header-h:    54px;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;line-height:1.5}
+
+/* ── Layout ───────────────────────────────── */
+#app{display:flex;height:100vh;overflow:hidden}
+
+/* Sidebar */
+#sidebar{
+  width:var(--sidebar-w);flex-shrink:0;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.brand{
+  padding:18px 16px 14px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+}
+.brand-icon{
+  width:34px;height:34px;
+  background:var(--accent);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;flex-shrink:0;
+}
+.brand-text{display:flex;flex-direction:column;}
+.brand-name{font-family:'Inter',sans-serif;font-weight:700;font-size:13px;letter-spacing:.02em;color:var(--text)}
+.brand-ver{font-size:10px;color:var(--text3);font-family:'DM Mono',monospace}
+
+nav{padding:12px 8px;flex:1;display:flex;flex-direction:column;gap:2px}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;border-radius:7px;
+  cursor:pointer;color:var(--text2);
+  font-size:13px;font-weight:500;
+  transition:background .12s,color .12s;
+  user-select:none;
+}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:rgba(249,115,22,.12);color:var(--accent)}
+.nav-icon{font-size:16px;width:20px;text-align:center}
+
+.sidebar-status{
+  padding:12px;border-top:1px solid var(--border);
+  display:flex;flex-direction:column;gap:6px;
+}
+.status-chip{
+  display:flex;align-items:center;gap:7px;
+  padding:6px 8px;border-radius:6px;
+  background:var(--surface2);font-size:11px;
+  font-family:'DM Mono',monospace;
+}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot.ok{background:var(--ok);box-shadow:0 0 5px var(--ok)}
+.dot.err{background:var(--err)}
+.dot.idle{background:var(--text3)}
+.dot.pulse{background:var(--ok);animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 5px var(--ok)}50%{opacity:.5;box-shadow:none}}
+
+/* Main area */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+.topbar{
+  height:var(--header-h);flex-shrink:0;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;
+  background:var(--surface);gap:12px;
+  -webkit-app-region: drag;
+}
+.no-drag { -webkit-app-region: no-drag; }
+.page-title{font-family:'Syne',sans-serif;font-weight:700;font-size:16px;flex:1}
+.topbar-badge{
+  padding:3px 9px;border-radius:20px;font-size:11px;
+  font-weight:600;letter-spacing:.04em;font-family:'DM Mono',monospace;
+}
+.badge-ok{background:rgba(34,197,94,.15);color:var(--ok);border:1px solid rgba(34,197,94,.3)}
+.badge-err{background:rgba(239,68,68,.15);color:var(--err);border:1px solid rgba(239,68,68,.3)}
+.badge-warn{background:rgba(234,179,8,.15);color:var(--warn);border:1px solid rgba(234,179,8,.3)}
+.badge-idle{background:rgba(92,100,120,.15);color:var(--text3);border:1px solid var(--border)}
+
+.content{flex:1;overflow-y:auto;padding:20px}
+.content::-webkit-scrollbar{width:4px}
+.content::-webkit-scrollbar-track{background:transparent}
+.content::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* Panels */
+.panel{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:18px;margin-bottom:16px;
+}
+.panel-header{
+  display:flex;align-items:center;gap:10px;margin-bottom:14px;
+}
+.panel-icon{
+  width:30px;height:30px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;
+}
+.pi-orange{background:rgba(249,115,22,.18)}
+.pi-blue{background:rgba(59,130,246,.18)}
+.pi-green{background:rgba(34,197,94,.18)}
+.pi-purple{background:rgba(168,85,247,.18)}
+.pi-red{background:rgba(239,68,68,.18)}
+
+.panel-title{font-family:'Syne',sans-serif;font-weight:700;font-size:14px}
+.panel-sub{font-size:11px;color:var(--text3);margin-top:1px}
+
+/* Form */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.form-row.single{grid-template-columns:1fr}
+.label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px;letter-spacing:.05em;text-transform:uppercase}
+input,select{
+  width:100%;padding:8px 11px;
+  background:var(--surface2);
+  border:1px solid var(--border2);
+  border-radius:7px;color:var(--text);
+  font-size:13px;font-family:'DM Sans',sans-serif;
+  transition:border-color .15s,box-shadow .15s;
+  outline:none;
+}
+input::placeholder{color:var(--text3)}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(249,115,22,.12)}
+select option{background:var(--surface2)}
+
+/* Buttons */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:8px 16px;border-radius:7px;font-size:13px;font-weight:500;
+  cursor:pointer;border:none;transition:opacity .15s,transform .08s;
+  font-family:'DM Sans',sans-serif;white-space:nowrap;
+}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover:not(:disabled){background:var(--accent2)}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border2)}
+.btn-ghost:hover:not(:disabled){border-color:var(--border2);background:var(--surface3)}
+.btn-ok{background:rgba(34,197,94,.15);color:var(--ok);border:1px solid rgba(34,197,94,.25)}
+.btn-ok:hover:not(:disabled){background:rgba(34,197,94,.22)}
+.btn-err{background:rgba(239,68,68,.12);color:var(--err);border:1px solid rgba(239,68,68,.2)}
+.btn-err:hover:not(:disabled){background:rgba(239,68,68,.2)}
+.btn-sm{padding:5px 11px;font-size:12px}
+
+/* Alerts */
+.alert{padding:10px 13px;border-radius:7px;font-size:13px;margin-bottom:10px;display:flex;align-items:flex-start;gap:8px}
+.alert-ok{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:#4ade80}
+.alert-err{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:#f87171}
+.alert-warn{background:rgba(234,179,8,.08);border:1px solid rgba(234,179,8,.2);color:#facc15}
+.alert-info{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);color:#60a5fa}
+
+/* Printer card */
+.printer-card{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:9px;padding:14px;margin-bottom:10px;
+}
+.printer-card-header{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;
+}
+.printer-info{flex:1}
+.printer-name{font-weight:600;font-size:13px;margin-bottom:2px}
+.printer-meta{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace}
+.match-badge{
+  padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;
+  font-family:'DM Mono',monospace;letter-spacing:.04em;white-space:nowrap;
+}
+.mb-exact{background:rgba(34,197,94,.15);color:var(--ok)}
+.mb-partial{background:rgba(234,179,8,.15);color:var(--warn)}
+.mb-none{background:rgba(239,68,68,.15);color:var(--err)}
+.mb-saved{background:rgba(59,130,246,.15);color:#60a5fa}
+
+.mapping-row{display:flex;align-items:center;gap:8px}
+.mapping-arrow{color:var(--text3);font-size:18px;flex-shrink:0}
+
+/* Activity feed */
+#activity-feed{display:flex;flex-direction:column;gap:6px}
+.activity-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 10px;border-radius:7px;
+  background:var(--surface2);border:1px solid var(--border);
+  font-size:12px;
+}
+.activity-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.activity-dot.ok{background:var(--ok)}
+.activity-dot.err{background:var(--err)}
+.activity-dot.info{background:var(--info)}
+.activity-dot.warn{background:var(--warn)}
+.activity-msg{flex:1;color:var(--text2)}
+.activity-ts{font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;flex-shrink:0}
+
+/* Log panel */
+#log-box{
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:12px;height:320px;overflow-y:auto;
+  font-family:'DM Mono',monospace;font-size:11px;line-height:1.7;
+}
+#log-box::-webkit-scrollbar{width:4px}
+#log-box::-webkit-scrollbar-thumb{background:var(--border2)}
+.log-info{color:#60a5fa}
+.log-ok{color:var(--ok)}
+.log-warn{color:var(--warn)}
+.log-error{color:var(--err)}
+.log-print{color:var(--purple)}
+.log-ts{color:var(--text3);margin-right:6px}
+
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.stat-card{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:9px;padding:14px;text-align:center;
+}
+.stat-value{font-family:'Syne',sans-serif;font-size:26px;font-weight:700;line-height:1}
+.stat-label{font-size:11px;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:.05em}
+
+/* Spinner */
+.spinner{
+  width:14px;height:14px;border:2px solid rgba(255,255,255,.2);
+  border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Tabs */
+.tab-bar{display:flex;gap:4px;margin-bottom:14px}
+.tab-btn{
+  padding:6px 13px;border-radius:6px;font-size:12px;font-weight:500;
+  cursor:pointer;color:var(--text3);background:transparent;border:1px solid transparent;
+  transition:all .15s;font-family:'DM Sans',sans-serif;
+}
+.tab-btn.active{background:var(--surface2);color:var(--text);border-color:var(--border)}
+.tab-btn:hover:not(.active){color:var(--text2)}
+
+/* Utils */
+.hidden{display:none!important}
+.row{display:flex;align-items:center;gap:8px}
+.ml-auto{margin-left:auto}
+hr.divider{border:none;border-top:1px solid var(--border);margin:14px 0}
+.text-ok{color:var(--ok)}
+.text-err{color:var(--err)}
+.text-warn{color:var(--warn)}
+.text-dim{color:var(--text3)}
+.mono{font-family:'DM Mono',monospace}
+</style>
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ── Sidebar ─────────────────────────── -->
+  <aside id="sidebar" class="no-drag">
+    <div class="brand">
+      <div class="brand-text">
+        <span class="brand-name">OrderOwn</span>
+        <span class="brand-ver">v<span id="ver">—</span></span>
+      </div>
+    </div>
+
+    <nav>
+      <div class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">⚡</span> Dashboard
+      </div>
+      <div class="nav-item" data-page="connection">
+        <span class="nav-icon">🔌</span> Connection
+      </div>
+      <div class="nav-item" data-page="printers">
+        <span class="nav-icon">🗺️</span> Printer Map
+      </div>
+      <div class="nav-item" data-page="activity">
+        <span class="nav-icon">📋</span> Activity
+      </div>
+      <div class="nav-item" data-page="logs">
+        <span class="nav-icon">🔍</span> Debug Logs
+      </div>
+    </nav>
+
+    <div class="sidebar-status">
+      <div class="status-chip">
+        <div class="dot idle" id="svc-dot"></div>
+        <span id="svc-label">Not running</span>
+      </div>
+      <div class="status-chip">
+        <div class="dot idle" id="mode-dot"></div>
+        <span id="mode-label">No mode</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ───────────────────────────── -->
+  <main id="main">
+    <div class="topbar">
+      <span class="page-title" id="page-title">Dashboard</span>
+      <span id="topbar-badge" class="topbar-badge badge-idle no-drag">OFFLINE</span>
+      <button class="btn btn-ghost btn-sm no-drag" id="btn-update" style="display:none">↑ Update</button>
+    </div>
+
+    <div class="content" id="page-dashboard">
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-value text-ok" id="stat-done">0</div>
+          <div class="stat-label">Printed Today</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-queue">0</div>
+          <div class="stat-label">Queue</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value text-err" id="stat-fail">0</div>
+          <div class="stat-label">Failed</div>
+        </div>
+      </div>
+
+      <!-- Quick controls -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-icon pi-orange">⚙️</div>
+          <div>
+            <div class="panel-title">Service Control</div>
+            <div class="panel-sub">Start or stop the print service</div>
+          </div>
+        </div>
+        <div id="dash-alert" class="hidden"></div>
+        <div class="row" style="gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="btn-start-dash">▶  Start Service</button>
+          <button class="btn btn-ghost" id="btn-stop-dash">⏹  Stop</button>
+          <button class="btn btn-ghost btn-sm" id="btn-refresh-status">↻ Refresh</button>
+        </div>
+        <hr class="divider"/>
+        <div class="row text-dim" style="font-size:12px;gap:16px;flex-wrap:wrap">
+          <span>Status: <b id="status-text" class="text-warn">—</b></span>
+          <span>Mode: <b id="mode-text">—</b></span>
+          <span>Queue: <b id="queue-text">0</b></span>
+          <span>Endpoint: <b id="endpoint-text" style="color:var(--text2)">—</b></span>
+        </div>
+      </div>
+
+      <!-- Polling status card -->
+      <div class="panel" id="poll-status-panel">
+        <div class="panel-header">
+          <div class="panel-icon pi-blue">⏱</div>
+          <div>
+            <div class="panel-title">Polling Status</div>
+            <div class="panel-sub" id="poll-interval-label">Interval: —</div>
+          </div>
+          <span id="poll-mode-badge" class="topbar-badge badge-idle" style="margin-left:auto">IDLE</span>
+        </div>
+        <div class="row" style="font-size:12px;gap:20px;flex-wrap:wrap;margin-bottom:10px">
+          <span class="text-dim">Last polled: <b id="last-poll-time" style="color:var(--text2)">never</b></span>
+          <span class="text-dim">Jobs found: <b id="last-poll-jobs" style="color:var(--text2)">—</b></span>
+          <span class="text-dim">Endpoint: <b id="last-poll-endpoint" style="color:var(--text2)">—</b></span>
+        </div>
+        <!-- Last 6 poll ticks mini-log -->
+        <div id="poll-tick-feed" style="display:flex;flex-direction:column;gap:3px;max-height:130px;overflow-y:auto"></div>
+      </div>
+
+      <!-- Recent activity preview -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-icon pi-purple">📡</div>
+          <div>
+            <div class="panel-title">Recent Activity</div>
+            <div class="panel-sub">Last 10 print events</div>
+          </div>
+          <button class="btn btn-ghost btn-sm ml-auto" id="btn-clear-activity">Clear</button>
+        </div>
+        <div id="activity-feed-dash">
+          <div class="text-dim" style="font-size:12px;text-align:center;padding:20px">No activity yet</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Connection page ─────────────────── -->
+    <div class="content hidden" id="page-connection">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-icon pi-blue">🌐</div>
+          <div>
+            <div class="panel-title">API Connection</div>
+            <div class="panel-sub">Configure your Laravel app connection</div>
+          </div>
+        </div>
+        <div id="conn-alert" class="hidden"></div>
+        <div class="form-row">
+          <div>
+            <label class="label">Domain URL</label>
+            <input type="url" id="inp-domain" placeholder="https://your-app.com"/>
+          </div>
+          <div>
+            <label class="label">API Key</label>
+            <input type="text" id="inp-key" placeholder="your-api-key"/>
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <label class="label">Image URL Path <span class="text-dim">(relative public path to receipt images)</span></label>
+            <input type="text" id="inp-image-path" placeholder="/user-uploads/print/"/>
+          </div>
+          <div>
+            <label class="label">Poll Interval <span class="text-dim">(seconds, 1–60, used in polling mode)</span></label>
+            <input type="number" id="inp-poll-interval" min="1" max="60" step="1" placeholder="4" value="4"/>
+          </div>
+        </div>
+        <div class="row" style="gap:10px;flex-wrap:wrap">
+          <button class="btn btn-ok" id="btn-test">🔌 Test Connection</button>
+          <button class="btn btn-primary" id="btn-save-conn">💾 Save &amp; Start</button>
+          <button class="btn btn-ghost" id="btn-test-pull">🩺 Test Pull</button>
+        </div>
+      </div>
+
+      <!-- Pull diagnostic panel -->
+      <div class="panel" id="pull-diag-panel" style="display:none">
+        <div class="panel-header">
+          <div class="panel-icon pi-blue">🩺</div>
+          <div>
+            <div class="panel-title">Pull Endpoint Diagnostic</div>
+            <div class="panel-sub">Raw response from both pull endpoints — use this to debug job detection</div>
+          </div>
+        </div>
+        <div id="pull-diag-content" style="font-family:'DM Mono',monospace;font-size:11px;line-height:1.7">
+          <span class="text-dim">Click Test Pull to run…</span>
+        </div>
+      </div>
+
+      <div class="panel" id="pusher-panel" style="display:none">
+        <div class="panel-header">
+          <div class="panel-icon pi-purple">⚡</div>
+          <div>
+            <div class="panel-title">Pusher / Live Mode</div>
+            <div class="panel-sub">Real-time WebSocket printing enabled</div>
+          </div>
+        </div>
+        <div id="pusher-info" class="text-dim" style="font-size:12px"></div>
+      </div>
+    </div>
+
+    <!-- ── Printer mapping page ────────────── -->
+    <div class="content hidden" id="page-printers">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-icon pi-orange">🖨️</div>
+          <div>
+            <div class="panel-title">Printer Mapping</div>
+            <div class="panel-sub">Map API printers → local system printers</div>
+          </div>
+          <button class="btn btn-ghost btn-sm ml-auto" id="btn-refresh-printers">↻ Refresh</button>
+        </div>
+        <div id="printers-alert" class="hidden"></div>
+        <div id="printers-list">
+          <div class="text-dim" style="font-size:12px;text-align:center;padding:24px">
+            Click <strong>Refresh</strong> to load printers
+          </div>
+        </div>
+      </div>
+
+      <!-- Current mappings summary -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-icon pi-green">✅</div>
+          <div>
+            <div class="panel-title">Active Mappings</div>
+            <div class="panel-sub">Saved API → Local printer mappings</div>
+          </div>
+          <button class="btn btn-err btn-sm ml-auto" id="btn-clear-maps">🗑 Clear All</button>
+        </div>
+        <div id="mappings-list">
+          <div class="text-dim" style="font-size:12px">No mappings saved yet</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Activity page ───────────────────── -->
+    <div class="content hidden" id="page-activity">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-icon pi-purple">📋</div>
+          <div>
+            <div class="panel-title">Activity Log</div>
+            <div class="panel-sub">All print job events</div>
+          </div>
+          <button class="btn btn-ghost btn-sm ml-auto" id="btn-clear-act-full">Clear</button>
+        </div>
+        <div id="activity-feed" style="max-height:600px;overflow-y:auto">
+          <div class="text-dim" style="font-size:12px;text-align:center;padding:24px">No activity yet</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Logs page ───────────────────────── -->
+    <div class="content hidden" id="page-logs">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-icon pi-red">🔍</div>
+          <div>
+            <div class="panel-title">Debug Logs</div>
+            <div class="panel-sub">Raw system output — auto-updates every 2 s</div>
+          </div>
+          <div class="row gap-6 ml-auto">
+            <button class="btn btn-ghost btn-sm" id="btn-scroll-bottom">↓ Bottom</button>
+            <button class="btn btn-ghost btn-sm" id="btn-clear-logs">Clear</button>
+          </div>
+        </div>
+        <div class="tab-bar" id="log-level-tabs">
+          <button class="tab-btn active" data-level="ALL">ALL</button>
+          <button class="tab-btn" data-level="OK">OK</button>
+          <button class="tab-btn" data-level="INFO">INFO</button>
+          <button class="tab-btn" data-level="WARN">WARN</button>
+          <button class="tab-btn" data-level="ERROR">ERROR</button>
+          <button class="tab-btn" data-level="PRINT">PRINT</button>
+        </div>
+        <div id="log-box"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────
+const B = window.bridge; // exposed by preload
+let currentPage = 'dashboard';
+let allLogs = [];
+let allActivity = [];
+let logFilter = 'ALL';
+let savedMappings = {};
+let stats = { done: 0, fail: 0 };
+let pendingMappings = {}; // temp state while user is editing
+let pollTicks = []; // last N poll heartbeats for mini-log
+
+// ─── Init ─────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  // Version
+  B.getAppVersion().then(v => {
+    document.getElementById('ver').textContent = v || '—';
+  }).catch(() => {});
+
+  // Restore config
+  const cfg = await B.getConfig().catch(() => ({}));
+  if (cfg.domainUrl) document.getElementById('inp-domain').value = cfg.domainUrl;
+  if (cfg.key)       document.getElementById('inp-key').value       = cfg.key;
+  document.getElementById('inp-image-path').value = cfg.imageUrlPath || '/user-uploads/print/';
+  // Restore poll interval (stored as ms, display as seconds)
+  const savedMs = parseInt(cfg.pollInterval, 10) || 4000;
+  document.getElementById('inp-poll-interval').value = Math.round(savedMs / 1000);
+
+  // Load saved mappings
+  const mr = await B.getPrinterMappings().catch(() => ({ mappings: {} }));
+  savedMappings = mr.mappings || {};
+  renderMappingsSummary();
+
+  // Load existing logs
+  allLogs = await B.getLogs().catch(() => []);
+  renderLogs();
+
+  // Service status
+  await refreshStatus();
+
+  // Subscribe to events
+  B.on('log', line => {
+    allLogs.push(line);
+    if (allLogs.length > 300) allLogs.shift();
+    renderLogs();
+  });
+
+  B.on('job-start', d => addActivity('info',  `Job #${d.id} → [${d.printer}]${d.isCopy ? ' [COPY]' : ''} ${d.file}`));
+  B.on('job-done',  d => {
+    stats.done++;
+    document.getElementById('stat-done').textContent = stats.done;
+    addActivity('ok',   `Job #${d.id} printed on [${d.printer}]`);
+  });
+  B.on('job-fail',  d => {
+    stats.fail++;
+    document.getElementById('stat-fail').textContent = stats.fail;
+    addActivity('err', `Job #${d.id} failed: ${d.reason}`);
+  });
+  B.on('poll-jobs', d => addActivity('info', `Pulled ${d.count} job(s) from server`));
+  B.on('poll-error', d => addActivity('warn', `Poll error: ${d.msg}`));
+
+  // poll-tick: emitted every poll cycle (even 0 jobs) — update mini-feed + last-poll info
+  B.on('poll-tick', d => {
+    const elT = document.getElementById('last-poll-time');
+    if (elT) elT.textContent = d.localTs || (d.ts || '').substring(11,19);
+    const elJ = document.getElementById('last-poll-jobs');
+    if (elJ) elJ.textContent = d.error ? `⚠ ${d.error}` : (d.count === 0 ? '0 (idle)' : d.count);
+    const elE = document.getElementById('last-poll-endpoint');
+    if (elE) elE.textContent = d.endpoint || '—';
+    // add to mini-log
+    pollTicks.unshift(d);
+    if (pollTicks.length > 8) pollTicks.pop();
+    renderPollTicks();
+  });
+
+  // polling-state: emitted by startPolling() / stopPolling() / pusher-connected
+  B.on('polling-state', d => applyServiceState(d));
+
+  // pusher-state: emitted by initPusher connected/disconnected/error
+  B.on('pusher-state', d => applyServiceState(d));
+
+  // service-stopped: emitted when stop-service IPC is called
+  B.on('service-stopped', () => applyServiceState({ running: false, mode: 'stopped' }));
+
+  B.on('update-available',  () => document.getElementById('btn-update').style.display = 'flex');
+  B.on('update-downloaded', () => {
+    document.getElementById('btn-update').textContent = '↑ Install & Restart';
+    document.getElementById('btn-update').onclick = () => B.installUpdate();
+  });
+
+  // Auto-refresh status every 5s
+  setInterval(refreshStatus, 5000);
+  // Auto-refresh logs
+  setInterval(() => {
+    B.getLogs().then(l => { allLogs = l; renderLogs(); }).catch(() => {});
+  }, 2500);
+});
+
+// ─── Navigation ──────────────────────────────
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    const page = el.dataset.page;
+    navigateTo(page);
+  });
+});
+
+function navigateTo(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  document.querySelectorAll('.content').forEach(el => el.classList.add('hidden'));
+  document.getElementById(`page-${page}`).classList.remove('hidden');
+
+  const titles = {
+    dashboard:  'Dashboard',
+    connection: 'Connection Settings',
+    printers:   'Printer Mapping',
+    activity:   'Activity Log',
+    logs:       'Debug Logs',
+  };
+  document.getElementById('page-title').textContent = titles[page] || page;
+
+  if (page === 'printers') renderMappingsSummary();
+}
+
+// ─── Status helpers ───────────────────────────
+async function refreshStatus() {
+  const s = await B.getServiceStatus().catch(() => null);
+  if (!s) return;
+  document.getElementById('queue-text').textContent  = s.queue || 0;
+  document.getElementById('stat-queue').textContent  = s.queue || 0;
+  applyServiceState(s);
+  // Update poll interval display
+  if (s.interval) {
+    const el = document.getElementById('poll-interval-label');
+    if (el) el.textContent = `Interval: ${s.interval / 1000}s`;
+  }
+  // Update endpoint display
+  if (s.endpointPath) {
+    const et = document.getElementById('endpoint-text');
+    if (et) et.textContent = s.endpointPath;
+  }
+}
+
+// Central state applier — call from ANY event or refreshStatus
+// d: { running/active, mode, interval? }
+function applyServiceState(d) {
+  const running = d.running !== undefined ? d.running : d.active;
+  const mode    = d.mode || (d.pusher ? 'pusher' : (d.polling ? 'polling' : (running ? 'polling' : 'stopped')));
+
+  if (running && mode !== 'stopped') {
+    const isPusher  = mode === 'pusher';
+    const isConn    = mode === 'connecting';
+    const modeLabel = isPusher ? '⚡ Pusher Live' : isConn ? '⏳ Connecting…' : '⏲ Polling';
+    const dotClass  = isPusher ? 'pulse' : isConn ? 'idle' : 'ok';
+
+    setServiceChip('Running', 'pulse');
+    setModeChip(modeLabel, dotClass);
+    updateBadge('ONLINE', 'badge-ok');
+    document.getElementById('status-text').textContent = 'Running';
+    document.getElementById('status-text').className   = 'text-ok';
+    document.getElementById('mode-text').textContent   = modeLabel;
+
+    // Update polling status card badge
+    const pb = document.getElementById('poll-mode-badge');
+    if (pb) {
+      if (isPusher) {
+        pb.textContent  = '⚡ PUSHER';
+        pb.className    = 'topbar-badge badge-ok';
+      } else if (isConn) {
+        pb.textContent  = '⏳ CONNECTING';
+        pb.className    = 'topbar-badge badge-warn';
+      } else {
+        pb.textContent  = '⏲ POLLING';
+        pb.className    = 'topbar-badge badge-ok';
+      }
+    }
+    if (d.interval) {
+      const el = document.getElementById('poll-interval-label');
+      if (el) el.textContent = `Interval: ${d.interval / 1000}s`;
+    }
+  } else {
+    setServiceChip('Stopped', 'idle');
+    setModeChip('No mode', 'idle');
+    updateBadge('OFFLINE', 'badge-idle');
+    document.getElementById('status-text').textContent = 'Stopped';
+    document.getElementById('status-text').className   = 'text-warn';
+    document.getElementById('mode-text').textContent   = '—';
+    const pb = document.getElementById('poll-mode-badge');
+    if (pb) { pb.textContent = 'IDLE'; pb.className = 'topbar-badge badge-idle'; }
+  }
+}
+
+function setServiceChip(label, dotClass) {
+  document.getElementById('svc-label').textContent = label;
+  const dot = document.getElementById('svc-dot');
+  dot.className = 'dot ' + dotClass;
+}
+
+function setModeChip(label, dotClass) {
+  document.getElementById('mode-label').textContent = label;
+  const dot = document.getElementById('mode-dot');
+  dot.className = 'dot ' + dotClass;
+}
+
+function updateBadge(text, cls) {
+  const b = document.getElementById('topbar-badge');
+  b.textContent = text;
+  b.className = `topbar-badge ${cls}`;
+}
+
+function showAlert(containerId, type, msg) {
+  const el = document.getElementById(containerId);
+  el.className = `alert alert-${type}`;
+  el.innerHTML = `<span>${{ok:'✓',err:'✖',warn:'⚠',info:'ℹ'}[type]||'•'}</span><span>${msg}</span>`;
+  el.classList.remove('hidden');
+}
+function hideAlert(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ─── Dashboard actions ────────────────────────
+document.getElementById('btn-start-dash').onclick = async () => {
+  const cfg = await B.getConfig().catch(() => ({}));
+  if (!cfg.domainUrl || !cfg.key) {
+    showAlert('dash-alert', 'warn', 'Please configure Domain URL and API Key first.');
+    navigateTo('connection');
+    return;
+  }
+  showAlert('dash-alert', 'info', '⏳ Starting service…');
+  const pollIntervalMs = (parseInt(cfg.pollInterval, 10) || 4000);
+  const r = await B.startService({ domainUrl: cfg.domainUrl, key: cfg.key, pollInterval: pollIntervalMs })
+                   .catch(e => ({ success: false, error: e.message }));
+  if (r.success) {
+    const modeMsg = r.mode === 'connecting'
+      ? 'Polling started — attempting Pusher connection…'
+      : `<b>${r.mode}</b> mode`;
+    showAlert('dash-alert', 'ok', `Service started · ${modeMsg}`);
+    await refreshStatus();
+  } else {
+    showAlert('dash-alert', 'err', r.error || 'Failed to start');
+  }
+};
+
+document.getElementById('btn-stop-dash').onclick = async () => {
+  await B.stopService().catch(() => {});
+  showAlert('dash-alert', 'info', 'Service stopped');
+  await refreshStatus();
+};
+
+document.getElementById('btn-refresh-status').onclick = refreshStatus;
+
+document.getElementById('btn-clear-activity').onclick = () => {
+  allActivity = [];
+  renderActivityFeed('activity-feed-dash', true);
+};
+
+// ─── Test Pull diagnostic ────────────────────
+document.getElementById('btn-test-pull').onclick = async () => {
+  const domain = document.getElementById('inp-domain').value.trim();
+  const key    = document.getElementById('inp-key').value.trim();
+  if (!domain || !key) {
+    showAlert('conn-alert', 'warn', 'Enter Domain URL and API Key first');
+    return;
+  }
+
+  const panel = document.getElementById('pull-diag-panel');
+  const box   = document.getElementById('pull-diag-content');
+  panel.style.display = '';
+  box.innerHTML = '<span class="text-dim">⏳ Fetching…</span>';
+
+  const results = await B.testPullRaw({ domainUrl: domain, key }).catch(e => null);
+  if (!results) {
+    box.innerHTML = '<span style="color:var(--err)">IPC call failed</span>';
+    return;
+  }
+
+  let html = '';
+  for (const [ep, r] of Object.entries(results)) {
+    const isOk    = r.status >= 200 && r.status < 300;
+    const dotCls  = isOk ? 'ok' : 'err';
+    const statusClr = isOk ? 'var(--ok)' : 'var(--err)';
+
+    html += `<div style="margin-bottom:14px">`;
+    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">`;
+    html += `<div class="dot ${dotCls}" style="width:8px;height:8px"></div>`;
+    html += `<b style="color:${statusClr};font-size:12px">${esc(ep)}</b>`;
+    html += `<span style="color:var(--text3)">HTTP ${r.status || 'ERR'}</span>`;
+    if (r.dataType) html += `<span class="topbar-badge badge-idle">${esc(r.dataType)} · ${r.count ?? '?'} job(s)</span>`;
+    html += `</div>`;
+
+    if (r.error) {
+      html += `<div style="color:var(--err);padding:6px 0">${esc(r.error)}</div>`;
+    } else if (r.preview) {
+      html += `<div style="color:var(--text2);background:var(--bg);padding:8px;border-radius:5px;border:1px solid var(--border);overflow-x:auto;white-space:pre-wrap;word-break:break-all">${esc(r.preview)}</div>`;
+      // Job structure hint
+      if (r.rawData) {
+        const sample = Array.isArray(r.rawData) ? r.rawData[0] : r.rawData;
+        if (sample) {
+          const hasImageFile  = !!sample.image_filename;
+          const hasPayload    = !!(sample.payload?.text || sample.text);
+          const hasPrinter    = !!(sample.printer?.name || sample.printer_name);
+          html += `<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">`;
+          html += `<span class="topbar-badge ${hasImageFile ? 'badge-ok' : 'badge-err'}">image_filename: ${hasImageFile ? '✓' : '✗'}</span>`;
+          html += `<span class="topbar-badge ${hasPayload ? 'badge-ok' : 'badge-warn'}">payload.text: ${hasPayload ? '✓' : '✗'}</span>`;
+          html += `<span class="topbar-badge ${hasPrinter ? 'badge-ok' : 'badge-err'}">printer.name: ${hasPrinter ? '✓' : '✗'}</span>`;
+          html += `</div>`;
+        }
+      }
+    }
+    html += `</div>`;
+  }
+  box.innerHTML = html;
+};
+
+// ─── Connection actions ───────────────────────
+document.getElementById('btn-test').onclick = async () => {
+  const domain = document.getElementById('inp-domain').value.trim();
+  const key    = document.getElementById('inp-key').value.trim();
+  if (!domain || !key) { showAlert('conn-alert', 'warn', 'Domain URL and API Key are required'); return; }
+
+  showAlert('conn-alert', 'info', '⏳ Testing connection…');
+  const r = await B.testConnection({ domainUrl: domain, key }).catch(e => ({ success: false, error: e.message }));
+
+  if (r.success) {
+    const modeMsg = r.pusher_enabled ? ' — Pusher Live mode available ⚡' : ' — Polling mode';
+    showAlert('conn-alert', 'ok', '✓ Connected' + modeMsg);
+    document.getElementById('fetchPrintersBtn-proxy') && null; // just refresh btn
+
+    if (r.pusher_enabled && r.pusher_config) {
+      const p = r.pusher_config;
+      document.getElementById('pusher-panel').style.display = '';
+      document.getElementById('pusher-info').textContent =
+        `App: ${p.app_id} | Cluster: ${p.cluster} | Channel: ${p.channel}`;
+    }
+  } else {
+    showAlert('conn-alert', 'err', r.error || 'Connection failed');
+  }
+};
+
+document.getElementById('btn-save-conn').onclick = async () => {
+  const domainUrl    = document.getElementById('inp-domain').value.trim();
+  const key          = document.getElementById('inp-key').value.trim();
+  const imageUrlPath = document.getElementById('inp-image-path').value.trim() || '/user-uploads/print/';
+  // Convert seconds → milliseconds; clamp to 1–60 s
+  const secs         = Math.min(60, Math.max(1, parseInt(document.getElementById('inp-poll-interval').value, 10) || 4));
+  const pollInterval = secs * 1000;
+
+  if (!domainUrl || !key) { showAlert('conn-alert', 'warn', 'Domain URL and API Key are required'); return; }
+
+  showAlert('conn-alert', 'info', '⏳ Saving and starting service…');
+  const r = await B.saveConfig({ domainUrl, key, imageUrlPath, pollInterval })
+                   .catch(e => ({ success: false, error: e.message }));
+
+  if (r.success) {
+    const modeMsg = r.mode === 'connecting'
+      ? 'Polling active — checking for Pusher…'
+      : `<b>${r.mode}</b> mode`;
+    showAlert('conn-alert', 'ok', `Saved · ${modeMsg}`);
+    await refreshStatus();
+  } else {
+    showAlert('conn-alert', 'err', r.error || 'Save failed');
+  }
+};
+
+// ─── Printer mapping ──────────────────────────
+document.getElementById('btn-refresh-printers').onclick = loadPrinters;
+document.getElementById('btn-clear-maps').onclick = async () => {
+  await B.clearPrinterMappings().catch(() => {});
+  savedMappings = {};
+  pendingMappings = {};
+  renderMappingsSummary();
+  showAlert('printers-alert', 'ok', 'All mappings cleared');
+};
+
+async function loadPrinters() {
+  const cfg = await B.getConfig().catch(() => ({}));
+  if (!cfg.domainUrl || !cfg.key) {
+    showAlert('printers-alert', 'warn', 'Please configure connection first');
+    return;
+  }
+
+  document.getElementById('printers-list').innerHTML =
+    '<div class="row" style="padding:20px;justify-content:center;gap:10px"><div class="spinner" style="border-color:rgba(249,115,22,.2);border-top-color:var(--accent)"></div><span class="text-dim">Loading printers…</span></div>';
+
+  const r = await B.fetchApiPrinters({ domainUrl: cfg.domainUrl, key: cfg.key }).catch(e => ({ success: false, error: e.message }));
+  hideAlert('printers-alert');
+
+  if (!r.success) {
+    showAlert('printers-alert', 'err', r.error || 'Failed to fetch printers');
+    document.getElementById('printers-list').innerHTML = '';
+    return;
+  }
+
+  if (r.warning) {
+    showAlert('printers-alert', 'warn', r.warning);
+  }
+
+  const mr = await B.getPrinterMappings().catch(() => ({ mappings: {} }));
+  savedMappings = mr.mappings || {};
+  pendingMappings = { ...savedMappings };
+
+  if (r.mappings.length === 0) {
+    document.getElementById('printers-list').innerHTML =
+      '<div class="text-dim" style="text-align:center;padding:20px">No direct-print printers found in API. Ensure printers have <code>printing_choice = directPrint</code>.</div>';
+    return;
+  }
+
+  let html = '';
+  r.mappings.forEach((m, idx) => {
+    const ap      = m.api;
+    const saved   = savedMappings[ap.name];
+    const sel     = saved || m.suggestion || '';
+    const mbClass = saved ? 'mb-saved' : (m.matchType === 'exact' ? 'mb-exact' : m.matchType === 'partial' ? 'mb-partial' : 'mb-none');
+    const mbLabel = saved ? '💾 SAVED' : m.matchType.toUpperCase();
+
+    // m.localList is now array of {name, status} objects
+    const options = m.localList.map(lp => {
+      const n = lp.name || lp;
+      const statusHint = lp.status ? ` (${lp.status})` : '';
+      return `<option value="${esc(n)}" ${n === sel ? 'selected' : ''}>${esc(n)}${statusHint}</option>`;
+    }).join('');
+
+    const parentTag = ap.parent_printer_id
+      ? `<span class="topbar-badge badge-warn" style="font-size:10px">Copy of #${ap.parent_printer_id}</span>`
+      : '';
+
+    html += `<div class="printer-card" id="pcard-${idx}">
+      <div class="printer-card-header">
+        <div class="printer-info">
+          <div class="printer-name" style="display:flex;align-items:center;gap:6px">
+            ${esc(ap.name)} ${parentTag}
+          </div>
+          <div class="printer-meta">
+            format: ${esc(ap.print_format || '?')} &nbsp;·&nbsp;
+            type: ${esc(ap.type || '?')} &nbsp;·&nbsp;
+            share: ${esc(ap.share_name || 'n/a')}
+          </div>
+        </div>
+        <span class="match-badge ${mbClass}" id="mbadge-${idx}">${mbLabel}</span>
+      </div>
+      <div class="mapping-row">
+        <span class="text-dim" style="font-size:11px;white-space:nowrap">Map to local:</span>
+        <span class="mapping-arrow">→</span>
+        <select id="pmap-${idx}" data-api="${esc(ap.name)}" data-idx="${idx}">
+          <option value="">— select local printer —</option>
+          ${options}
+        </select>
+        <button class="btn btn-ok btn-sm" onclick="saveMapping(${idx})">Save</button>
+      </div>
+    </div>`;
+  });
+
+  document.getElementById('printers-list').innerHTML = html;
+
+  // Live save on select change
+  document.querySelectorAll('[id^="pmap-"]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const idx = sel.dataset.idx;
+      const api = sel.dataset.api;
+      pendingMappings[api] = sel.value;
+    });
+  });
+
+  renderMappingsSummary();
+}
+
+async function saveMapping(idx) {
+  const sel = document.getElementById(`pmap-${idx}`);
+  if (!sel) return;
+  const apiName   = sel.dataset.api;
+  const localName = sel.value;
+
+  if (!localName) {
+    showAlert('printers-alert', 'warn', 'Select a local printer first');
+    return;
+  }
+
+  savedMappings[apiName] = localName;
+  const r = await B.savePrinterMappings({ printerMappings: savedMappings }).catch(() => ({ success: false }));
+
+  if (r.success) {
+    const badge = document.getElementById(`mbadge-${idx}`);
+    if (badge) { badge.className = 'match-badge mb-saved'; badge.textContent = '💾 SAVED'; }
+    showAlert('printers-alert', 'ok', `Saved: ${apiName} → ${localName}`);
+    renderMappingsSummary();
+  } else {
+    showAlert('printers-alert', 'err', 'Failed to save mapping');
+  }
+}
+// Expose to inline onclick
+window.saveMapping = saveMapping;
+
+function renderMappingsSummary() {
+  const el = document.getElementById('mappings-list');
+  const entries = Object.entries(savedMappings);
+  if (entries.length === 0) {
+    el.innerHTML = '<div class="text-dim" style="font-size:12px">No mappings saved yet</div>';
+    return;
+  }
+  el.innerHTML = entries.map(([api, local]) => `
+    <div class="row" style="padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <span class="mono text-ok" style="font-size:11px">${esc(api)}</span>
+      <span class="mapping-arrow" style="color:var(--text3)">→</span>
+      <span class="mono" style="font-size:11px">${esc(local)}</span>
+      <button class="btn btn-err btn-sm ml-auto" onclick="removeMapping('${esc(api)}')">✕</button>
+    </div>
+  `).join('');
+}
+
+async function removeMapping(apiName) {
+  delete savedMappings[apiName];
+  await B.savePrinterMappings({ printerMappings: savedMappings }).catch(() => {});
+  renderMappingsSummary();
+  loadPrinters(); // refresh badges
+}
+window.removeMapping = removeMapping;
+
+// ─── Poll tick mini-feed ─────────────────────
+function renderPollTicks() {
+  const el = document.getElementById('poll-tick-feed');
+  if (!el) return;
+  if (pollTicks.length === 0) {
+    el.innerHTML = '<div class="text-dim" style="font-size:11px;text-align:center;padding:6px">No polls yet</div>';
+    return;
+  }
+  el.innerHTML = pollTicks.map(t => {
+    const hasErr  = !!t.error;
+    const hasJobs = !hasErr && t.count > 0;
+    const dotCls  = hasErr ? 'err' : hasJobs ? 'ok' : 'idle';
+    const jobTxt  = hasErr
+      ? `<span style="color:var(--err)">⚠ ${esc(String(t.error).substring(0,60))}</span>`
+      : hasJobs
+        ? `<b style="color:var(--ok)">${t.count} job${t.count>1?'s':''}</b>`
+        : '<span style="color:var(--text3)">idle</span>';
+    const time    = t.localTs || (t.ts ? t.ts.substring(11,19) : '');
+    const epTag   = t.endpoint ? ` <span style="color:var(--text3);font-size:10px">[${esc(t.endpoint)}]</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:7px;padding:3px 4px;font-size:11px;font-family:'DM Mono',monospace">
+      <div class="dot ${dotCls}" style="width:6px;height:6px;flex-shrink:0"></div>
+      <span style="color:var(--text3)">${time}</span>
+      <span style="color:var(--text2)">→</span>
+      ${jobTxt}${epTag}
+    </div>`;
+  }).join('');
+}
+
+// ─── Activity feed ────────────────────────────
+function addActivity(type, msg) {
+  const item = {
+    type,
+    msg,
+    ts: new Date().toLocaleTimeString([], { hour12: false }),
+  };
+  allActivity.unshift(item);
+  if (allActivity.length > 200) allActivity.pop();
+  renderActivityFeed('activity-feed-dash', true);
+  renderActivityFeed('activity-feed',      false);
+}
+
+function renderActivityFeed(containerId, preview) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const items = preview ? allActivity.slice(0, 10) : allActivity;
+  if (items.length === 0) {
+    el.innerHTML = '<div class="text-dim" style="font-size:12px;text-align:center;padding:20px">No activity yet</div>';
+    return;
+  }
+  el.innerHTML = items.map(item => `
+    <div class="activity-item">
+      <div class="activity-dot ${item.type}"></div>
+      <span class="activity-msg">${esc(item.msg)}</span>
+      <span class="activity-ts">${item.ts}</span>
+    </div>
+  `).join('');
+}
+
+document.getElementById('btn-clear-act-full').onclick = () => {
+  allActivity = [];
+  renderActivityFeed('activity-feed', false);
+  renderActivityFeed('activity-feed-dash', true);
+};
+
+// ─── Logs ─────────────────────────────────────
+function renderLogs() {
+  const box = document.getElementById('log-box');
+  const filtered = logFilter === 'ALL' ? allLogs : allLogs.filter(l => l.level === logFilter);
+  if (filtered.length === 0) {
+    box.innerHTML = '<span class="text-dim">No log entries</span>';
+    return;
+  }
+
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+
+  box.innerHTML = filtered.map(l => {
+    const cls  = `log-${l.level.toLowerCase()}`;
+    const icon = { INFO:'·', OK:'✓', WARN:'⚠', ERROR:'✖', PRINT:'🖨' }[l.level] || '·';
+    // Use localTs (system timezone) if available, else fall back to UTC substring
+    const time = l.localTs || (l.ts ? l.ts.substring(11, 19) : '');
+    return `<div><span class="log-ts">${time}</span><span class="${cls}">${icon} ${esc(l.msg)}</span></div>`;
+  }).join('');
+
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+document.getElementById('btn-scroll-bottom').onclick = () => {
+  const box = document.getElementById('log-box');
+  box.scrollTop = box.scrollHeight;
+};
+
+document.getElementById('btn-clear-logs').onclick = () => {
+  allLogs = [];
+  renderLogs();
+};
+
+document.getElementById('log-level-tabs').addEventListener('click', e => {
+  const btn = e.target.closest('.tab-btn');
+  if (!btn) return;
+  logFilter = btn.dataset.level;
+  document.querySelectorAll('#log-level-tabs .tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderLogs();
+});
+
+// ─── Update ───────────────────────────────────
+document.getElementById('btn-update').onclick = () => B.checkForUpdate();
+
+// ─── Util ─────────────────────────────────────
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
