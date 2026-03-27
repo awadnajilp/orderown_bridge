@@ -129,6 +129,134 @@ function apiHeaders(key) {
     return key ? { 'X-TABLETRACK-KEY': key, 'Accept': 'application/json' } : { 'Accept': 'application/json' };
 }
 
+// ─────────────────────────────────────────────
+//  System printer listing (cross-platform)
+// ─────────────────────────────────────────────
+async function listSystemPrinters() {
+    if (os.platform() === 'win32') {
+        return listSystemPrintersWin();
+    }
+    return new Promise((resolve) => {
+        exec('lpstat -p 2>/dev/null', { timeout: 5000 }, (err, stdout) => {
+            if (err || !stdout.trim()) return resolve([]);
+            const printers = [];
+            stdout.split('\n').forEach(line => {
+                const m = line.match(/^printer\s+(\S+)\s+is\s+([^.]+)/);
+                if (m) printers.push({ name: m[1], status: m[2].trim() });
+            });
+            resolve(printers);
+        });
+    });
+}
+
+// Windows: query BOTH Get-Printer (catches network/shared) AND Win32_Printer
+// (catches some legacy drivers), then merge and deduplicate by name.
+async function listSystemPrintersWin() {
+    const run = (cmd) => new Promise((res) => {
+        exec(cmd, { timeout: 10000 }, (err, stdout) => {
+            if (err) {
+                console.error(`Printer discovery command failed: ${cmd}\nError: ${err.message}`);
+            }
+            res(err || !stdout.trim() ? null : stdout.trim());
+        });
+    });
+
+    // Method 1: Get-Printer — most complete; works on Win8+/Server2012+
+    const gpCmd = `powershell -NoProfile -Command "Get-Printer | Select-Object Name,PrinterStatus,Shared,ShareName | ConvertTo-Json -Compress"`;
+    // Method 2: WMI — fallback, broader driver support
+    const wmiCmd = `powershell -NoProfile -Command "Get-WmiObject -Class Win32_Printer | Select-Object Name,WorkOffline,ShareName | ConvertTo-Json -Compress"`;
+    // Method 3: WMIC — legacy fallback for very old drivers / virtual printers
+    const legacyCmd = `wmic printer get Name /value`;
+
+    const [gpOut, wmiOut, legacyOut] = await Promise.all([run(gpCmd), run(wmiCmd), run(legacyCmd)]);
+
+    const seen = new Map(); // name.toLowerCase() → {name, status, shareName}
+
+    // Parse Get-Printer output
+    if (gpOut) {
+        try {
+            let arr = JSON.parse(gpOut);
+            if (!Array.isArray(arr)) arr = [arr];
+            for (const p of arr) {
+                if (!p.Name) continue;
+                const key = p.Name.toLowerCase();
+                if (!seen.has(key)) {
+                    const offline = p.PrinterStatus === 6 || p.PrinterStatus === 5;
+                    seen.set(key, {
+                        name:      p.Name,
+                        status:    offline ? 'offline' : 'ready',
+                        shareName: p.ShareName || '',
+                        shared:    !!p.Shared,
+                    });
+                }
+            }
+        } catch (e) { console.error('Failed to parse Get-Printer JSON:', e.message); }
+    }
+
+    // Parse WMI output
+    if (wmiOut) {
+        try {
+            let arr = JSON.parse(wmiOut);
+            if (!Array.isArray(arr)) arr = [arr];
+            for (const p of arr) {
+                if (!p.Name) continue;
+                const key = p.Name.toLowerCase();
+                if (!seen.has(key)) {
+                    seen.set(key, {
+                        name:      p.Name,
+                        status:    p.WorkOffline ? 'offline' : 'ready',
+                        shareName: p.ShareName || '',
+                        shared:    false,
+                    });
+                }
+            }
+        } catch (e) { console.error('Failed to parse Win32_Printer JSON:', e.message); }
+    }
+
+    // Parse Legacy WMIC output (simple Name=PrinterName lines)
+    if (legacyOut) {
+        legacyOut.split(/\r?\n/).forEach(line => {
+            if (line.startsWith('Name=')) {
+                const name = line.substring(5).trim();
+                if (name && !seen.has(name.toLowerCase())) {
+                    seen.set(name.toLowerCase(), {
+                        name,
+                        status: 'ready',
+                        shareName: '',
+                        shared: false
+                    });
+                }
+            }
+        });
+    }
+
+    // Return unique printers by actual Name
+    const unique = new Map();
+    for (const p of seen.values()) {
+        const k = p.name.toLowerCase();
+        if (!unique.has(k)) unique.set(k, p);
+    }
+    const result = Array.from(unique.values());
+    log('INFO', `Discovered ${result.length} local printers on Windows`);
+    return result;
+}
+
+async function printerExists(name) {
+    if (!name) return false;
+    if (os.platform() !== 'win32') {
+        return new Promise((resolve) => {
+            exec(`lpstat -p "${name}" 2>/dev/null`, { timeout: 3000 }, (err) => resolve(!err));
+        });
+    }
+    // Windows: check installed printers list (already enriched from both sources)
+    const printers = await listSystemPrintersWin();
+    const n = name.toLowerCase();
+    return printers.some(p =>
+        p.name.toLowerCase() === n ||
+        (p.shareName && p.shareName.toLowerCase() === n)
+    );
+}
+
 async function findSystemPrinter(name) {
     if (!name) return null;
     const printers = await listSystemPrinters();
