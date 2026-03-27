@@ -564,15 +564,30 @@ async function processSingleJob(job) {
     const escposLegacy  = job.payload?.text || job.text || null;
     const imageFilename = job.image_filename || null;
 
-    // A payload is only "present" if it has actual data or a defined type
-    const hasPayload    = !!(job.payload && (job.payload.print_type || htmlContent || escposBase64 || escposLegacy));
+    let printType = null;
 
-    // Determine engine: HTML > ESCPOS > IMAGE (Fallback)
-    let printType = 'escpos'; // baseline
-    if (hasPayload) {
-        printType = job.payload.print_type || (htmlContent ? 'html' : 'escpos');
-    } else if (imageFilename) {
+    // Check payload first (The "Gold" Rule)
+    if (job.payload) {
+        const pType = job.payload.print_type;
+        if (pType === 'html' && htmlContent) {
+            printType = 'html';
+        } else if (pType === 'escpos' && (escposBase64 || escposLegacy)) {
+            printType = 'escpos';
+        } else if (!pType) {
+            // If no explicit type in payload, try to infer from data
+            if (htmlContent) printType = 'html';
+            else if (escposBase64 || escposLegacy) printType = 'escpos';
+        }
+    }
+
+    // Fallback to image if no usable payload data was found
+    if (!printType && imageFilename) {
         printType = 'image';
+    }
+
+    // Absolute fallback (default to escpos if nothing else found)
+    if (!printType) {
+        printType = 'escpos';
     }
 
     const apiPrinterName    = job.printer?.name || job.printer_name || '';
