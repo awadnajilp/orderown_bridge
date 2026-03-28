@@ -428,4 +428,33 @@ Use the ORDEROWN_LOGO.png as the app icon and sidebar logo.
 
 ---
 
+## 11. Printing Logic & Technical Specifications
+
+The application follows a strict hierarchical logic to ensure maximum compatibility and reliability, especially for RTL/Arabic character support.
+
+### 11a. The "Gold" Rule: Payload Prioritization
+The client app always prioritizes the `payload` object over the `image_filename`.
+*   **If `payload` exists and contains data:** The app uses the engine specified in `payload.print_type` (`html` or `escpos`).
+*   **If `payload` is null or empty:** The app falls back to downloading and printing the `image_filename`.
+
+### 11b. Rendering Engines
+
+| Engine | Data Source | Logic | Technical Detail |
+|--------|-------------|-------|------------------|
+| **HTML** | `payload.html_content` | Renders HTML string in a headless Chromium window. | Fixed Width: **576px** (80mm) or **384px** (58mm) @ 203 DPI. |
+| **ESC/POS** | `payload.escpos_base64` | Decodes Base64 binary commands. | Sent directly to printer port without modification. |
+| **IMAGE** | `image_filename` | Downloads PNG/JPG from `{APP_URL}/user-uploads/print/`. | Rasterized and printed via Electron's graphic engine. |
+
+### 11c. Smart Fallback Mechanism
+If an **IMAGE** print job fails (e.g., file missing on server), the app performs the following:
+1.  Calls `POST /api/print-jobs/{id}/fallback-to-escpos`.
+2.  If the server returns a text-based payload, the job is **re-queued at the front** and printed immediately using the ESC/POS engine.
+
+### 11d. Connection & Queue Management
+*   **Status Updates:** Every job attempt is reported back to the server as `done` or `failed` via `PATCH /api/print-jobs/{id}`.
+*   **Ghost Job Guard:** If a job remains in the "printing" status for more than **5 minutes**, the client app treats it as a ghost job and skips it to prevent queue blockage.
+*   **Arabic Support:** HTML rendering at fixed pixel widths ensures that RTL text and Arabic font shaping are preserved exactly as intended, regardless of the printer's internal font capabilities.
+
+---
+
 *Last updated: built for OrderOwn Bridge v1.0.0*
